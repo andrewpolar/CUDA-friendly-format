@@ -51,17 +51,18 @@ const double alpha = 0.1;
 extern std::vector<double> models(nInner);
 extern std::vector<double> deltas(nInner);
 
-// ComputeInner — runs each inner logic model
+// ComputeInner â€” runs each inner logic model
 void ComputeInner(const std::vector<std::unique_ptr<UrysohnLogic>>& uInnerLogic, const std::vector<double>& features) {
 	for (int i = 0; i < nInner; ++i) {
 		models[i] = uInnerLogic[i]->Compute(features, false);
 	}
 }
 
-// DoOuter — runs outer logic and prepares deltas
+// DoOuter â€” runs outer logic and prepares deltas
 void DoOuter(const std::unique_ptr<UrysohnLogic>& uOuterLogic, double target) {
 	static std::vector<double> derivatives(nInner);
-	double prediction = uOuterLogic->Compute(models, derivatives, false);
+	double prediction = uOuterLogic->Compute(models, false);
+	uOuterLogic->ComputeDerivatives(derivatives);
 	double residual = alpha * (target - prediction);
 	for (int i = 0; i < nInner; ++i) {
 		deltas[i] = derivatives[i] * residual;
@@ -69,7 +70,7 @@ void DoOuter(const std::unique_ptr<UrysohnLogic>& uOuterLogic, double target) {
 	uOuterLogic->Update(residual);
 }
 
-// UpdateInner — applies deltas back to inner logic models
+// UpdateInner â€” applies deltas back to inner logic models
 void UpdateInner(std::vector<std::unique_ptr<UrysohnLogic>>& uInnerLogic) {
 	for (size_t i = 0; i < uInnerLogic.size(); ++i) {
 		uInnerLogic[i]->Update(deltas[i]);
