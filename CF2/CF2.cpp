@@ -22,7 +22,7 @@
 //This is sequential Newton-Kaczmarz method for Kolmogorov-Arnold networks. The features are random matrices,
 //targets are their determinants. Accuracy metric is Pearson correlation coefficient.
 //This code is restructured for CUDA friendly format. The model is set of structures and 
-//logic is isolated from model.
+//logic is sitting in global functions.
 
 //Although this code is sequential, typical Windows execution is faster than FastKAN
 //Pearson 0.839, Time 0.734
@@ -36,44 +36,73 @@
 //Pearson 0.969, Time 6.655
 //Pearson 0.971, Time 7.406
 
+//Linux compiled is twice faster.
+
 //FastKAN needs 41 seconds for CPU and 11 seconds for GPU on the same machine. 
+
+//# Compiler and flags
+//CXX = g++
+//CXXFLAGS = -O2 -std=c++17 -Wall -pthread
+//LDFLAGS = -pthread
+//
+//# Target name (final executable)
+//TARGET = CF2
+//
+//# Source files
+//SRCS = CF2.cpp
+//
+//# Object files
+//OBJS = $(SRCS:.cpp=.o)
+//
+//# Default rule
+//$(TARGET): $(OBJS)
+//	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(LDFLAGS)
+//
+//# Compile .cpp to .o
+//%.o: %.cpp
+//	$(CXX) $(CXXFLAGS) -c $< -o $@
+//
+//# Clean rule
+//clean:
+//	rm -f $(OBJS) $(TARGET)
 
 #include <iostream>
 #include <cmath>
+#include <algorithm>
 #include "Helper.h"
 #include "Urysohn.h"
 
 //configuration
-const int nInner = 64;
+const int nInner = 70;
 const double alpha = 0.1;
 
 // global buffers (keep same as before)
-extern std::vector<double> models(nInner);
-extern std::vector<double> deltas(nInner);
+std::vector<double> models(nInner);
+std::vector<double> deltas(nInner);
 
-// ComputeInner — runs each inner logic model
-void ComputeInner(const std::vector<std::unique_ptr<UrysohnLogic>>& uInnerLogic, const std::vector<double>& features) {
+// ComputeInner runs each inner logic model
+void ComputeInner(const std::vector<std::unique_ptr<UrysohnModel>>& uInnerModels, const std::vector<double>& features) {
 	for (int i = 0; i < nInner; ++i) {
-		models[i] = uInnerLogic[i]->Compute(features, false);
+		models[i] = Compute(features, false, *uInnerModels[i]);
 	}
 }
 
-// DoOuter — runs outer logic and prepares deltas
-void DoOuter(const std::unique_ptr<UrysohnLogic>& uOuterLogic, double target) {
+// DoOuter runs outer logic and prepares deltas
+void DoOuter(const std::unique_ptr<UrysohnModel>& uOuterModel, double target) {
 	static std::vector<double> derivatives(nInner);
-	double prediction = uOuterLogic->Compute(models, false);
-	uOuterLogic->ComputeDerivatives(derivatives);
+	double prediction = Compute(models, false, *uOuterModel);
+	ComputeDerivatives(derivatives, *uOuterModel);
 	double residual = alpha * (target - prediction);
 	for (int i = 0; i < nInner; ++i) {
 		deltas[i] = derivatives[i] * residual;
 	}
-	uOuterLogic->Update(residual);
+	Update(residual, *uOuterModel);
 }
 
-// UpdateInner — applies deltas back to inner logic models
-void UpdateInner(std::vector<std::unique_ptr<UrysohnLogic>>& uInnerLogic) {
-	for (size_t i = 0; i < uInnerLogic.size(); ++i) {
-		uInnerLogic[i]->Update(deltas[i]);
+// UpdateInner applies deltas back to inner logic models
+void UpdateInner(std::vector<std::unique_ptr<UrysohnModel>>& uInnerModels) {
+	for (size_t i = 0; i < uInnerModels.size(); ++i) {
+		Update(deltas[i], *uInnerModels[i]);
 	}
 }
 
@@ -92,50 +121,36 @@ int main() {
 	clock_t start_application = clock();
 	clock_t current_time = clock();
 
-	//find limits
-	std::vector<double> argmin;
-	std::vector<double> argmax;
-	for (int i = 0; i < nFeatures; ++i) {
-		argmin.push_back(min);
-		argmax.push_back(max);
-	}
-
-	double targetMin = Helper::MinV(targets_training);
-	double targetMax = Helper::MaxV(targets_training);
+	double targetMin = *std::min_element(targets_training.begin(), targets_training.end());
+	double targetMax = *std::max_element(targets_training.begin(), targets_training.end());
 
 	// Instantiate models
 	std::vector<std::unique_ptr<UrysohnModel>> uInnerModels;
-	std::vector<std::unique_ptr<UrysohnLogic>> uInnerLogic;
 	for (int i = 0; i < nInner; ++i) {
 		auto model = std::make_unique<UrysohnModel>();
 		InitializeUrysohnModel(*model, nFeatures, 3, min, max, targetMin, targetMax);
-		uInnerLogic.push_back(std::make_unique<UrysohnLogic>(*model));
 		uInnerModels.push_back(std::move(model));
 	}
 
-	// Outer model
 	auto uOuterModel = std::make_unique<UrysohnModel>();
 	InitializeUrysohnModel(*uOuterModel, nInner, 30, targetMin, targetMax, targetMin, targetMax);
-	auto uOuterLogic = std::make_unique<UrysohnLogic>(*uOuterModel);
 
 	//training
 	for (int epoch = 0; epoch < 16; ++epoch) {
 		for (int record = 0; record < nTrainingRecords; ++record) {
-			ComputeInner(uInnerLogic, features_training[record]);
-			DoOuter(uOuterLogic, targets_training[record]);
-			UpdateInner(uInnerLogic);
+			ComputeInner(uInnerModels, features_training[record]);
+			DoOuter(uOuterModel, targets_training[record]);
+			UpdateInner(uInnerModels);
 		}
 
 		//validation
 		auto v = std::vector<double>(nValidationRecords);
 		for (int record = 0; record < nValidationRecords; ++record) {
-			//compute
-			for (size_t i = 0; i < uInnerLogic.size(); ++i) {
-				models[i] = uInnerLogic[i]->Compute(features_validation[record], true);
+			for (size_t i = 0; i < uInnerModels.size(); ++i) {
+				models[i] = Compute(features_validation[record], true, *uInnerModels[i]);
 			}
-			v[record] = uOuterLogic->Compute(models, true);
+			v[record] = Compute(models, false, *uOuterModel);
 		}
-
 		double pearson = Helper::Pearson(v, targets_validation);
 
 		current_time = clock();
