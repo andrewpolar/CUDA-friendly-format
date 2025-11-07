@@ -3,6 +3,7 @@
 #include <vector>
 #include <cfloat>
 #include <random>
+#include <ctime>
 
 class Helper
 {
@@ -33,24 +34,10 @@ public:
 		stdY = sqrt(stdY);
 		return covariance / stdX / stdY;
 	}
-	static double MinV(const std::vector<double>& x) {
-		double min = x[0];
-		for (size_t i = 1; i < x.size(); ++i) {
-			if (x[i] < min) min = x[i];
-		}
-		return min;
-	}
-	static double MaxV(const std::vector<double>& x) {
-		double max = x[0];
-		for (size_t i = 1; i < x.size(); ++i) {
-			if (x[i] > max) max = x[i];
-		}
-		return max;
-	}
 
 	///////////// Determinat dataset
 	static std::vector<std::vector<double>> GenerateInput(int nRecords, int nFeatures, double min, double max) {
-		std::mt19937 rng(static_cast<unsigned>(std::time(nullptr)));
+		std::mt19937 rng(static_cast<unsigned>(time(nullptr)));
 		std::uniform_real_distribution<double> dist(min, max);
 		std::vector<std::vector<double>> x(nRecords);
 		for (int i = 0; i < nRecords; ++i) {
