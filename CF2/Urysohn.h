@@ -39,64 +39,57 @@ void InitializeUrysohnModel(UrysohnModel& u, int nFunctions, int nPoints, double
 	}
 };
 
-class UrysohnLogic {
-public:
-	UrysohnLogic(UrysohnModel& reference): U(&reference) {
-	}
-	double Compute(const std::vector<double>& inputs, bool freezeModel) {
-		double f = 0.0;
-		for (size_t i = 0; i < U->model.size(); ++i) {
-			double x = inputs[i];
-			if (!freezeModel) {
-				bool isChanged = false;
-				if (x <= U->xmin[i]) {
-					U->xmin[i] = x;
-					isChanged = true;
-				}
-				else if (x >= U->xmax[i]) {
-					U->xmax[i] = x;
-					isChanged = true;
-				}
-				if (isChanged) {
-					double gap = 0.01 * (U->xmax[i] - U->xmin[i]);
-					U->xmin[i] -= gap;
-					U->xmax[i] += gap;
-					U->deltax[i] = (U->xmax[i] - U->xmin[i]) / (U->model[i].size() - 1);
-				}
+double Compute(const std::vector<double>& inputs, bool freezeModel, UrysohnModel& U) {
+	double f = 0.0;
+	for (size_t i = 0; i < U.model.size(); ++i) {
+		double x = inputs[i];
+		if (!freezeModel) {
+			bool isChanged = false;
+			if (x <= U.xmin[i]) {
+				U.xmin[i] = x;
+				isChanged = true;
 			}
-			if (x <= U->xmin[i]) {
-				U->index[i] = 0;
-				U->offset[i] = 0.001;
-				f += U->model[i][0];
+			else if (x >= U.xmax[i]) {
+				U.xmax[i] = x;
+				isChanged = true;
 			}
-			else if (x >= U->xmax[i]) {
-				U->index[i] = (int)U->model[i].size() - 2;
-				U->offset[i] = 0.999;
-				f += U->model[i][U->model[i].size() - 1];
-			}
-			else {
-				double R = (x - U->xmin[i]) / U->deltax[i];
-				U->index[i] = (int)(R);
-				U->offset[i] = R - U->index[i];
-				f += U->model[i][U->index[i]] + (U->model[i][U->index[i] + 1] - U->model[i][U->index[i]]) * U->offset[i];
+			if (isChanged) {
+				double gap = 0.01 * (U.xmax[i] - U.xmin[i]);
+				U.xmin[i] -= gap;
+				U.xmax[i] += gap;
+				U.deltax[i] = (U.xmax[i] - U.xmin[i]) / (U.model[i].size() - 1);
 			}
 		}
-		return f / (double)U->model.size();
-	}
-	void ComputeDerivatives(std::vector<double>& derivatives) {
-		for (int i = 0; i < (int)U->model.size(); ++i) {
-			derivatives[i] = (U->model[i][U->index[i] + 1] - U->model[i][U->index[i]]) / U->deltax[i];
+		if (x <= U.xmin[i]) {
+			U.index[i] = 0;
+			U.offset[i] = 0.001;
+			f += U.model[i][0];
+		}
+		else if (x >= U.xmax[i]) {
+			U.index[i] = (int)U.model[i].size() - 2;
+			U.offset[i] = 0.999;
+			f += U.model[i][U.model[i].size() - 1];
+		}
+		else {
+			double R = (x - U.xmin[i]) / U.deltax[i];
+			U.index[i] = (int)(R);
+			U.offset[i] = R - U.index[i];
+			f += U.model[i][U.index[i]] + (U.model[i][U.index[i] + 1] - U.model[i][U.index[i]]) * U.offset[i];
 		}
 	}
-	void Update(double delta) {
-		for (int i = 0; i < (int)U->model.size(); ++i) {
-			double tmp = delta * U->offset[i];
-			U->model[i][U->index[i] + 1] += tmp;
-			U->model[i][U->index[i]] += delta - tmp;
-		}
-	}
+	return f / (double)U.model.size();
+}
 
-private:
-	UrysohnModel* U;  
-};
+void ComputeDerivatives(std::vector<double>& derivatives, UrysohnModel& U) {
+	for (int i = 0; i < (int)U.model.size(); ++i) {
+		derivatives[i] = (U.model[i][U.index[i] + 1] - U.model[i][U.index[i]]) / U.deltax[i];
+	}
+}
 
+void Update(double delta, UrysohnModel& U) {
+	for (int i = 0; i < (int)U.model.size(); ++i) {
+		double tmp = delta * U.offset[i];
+		U.model[i][U.index[i] + 1] += tmp;
+		U.model[i][U.index[i]] += delta - tmp;
+	}
+}
