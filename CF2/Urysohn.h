@@ -13,7 +13,8 @@ struct UrysohnModel {
 	std::vector<int>    index;
 };
 
-void InitializeUrysohnModel(UrysohnModel& u, int nFunctions, int nPoints, double xmin, double xmax, double fmin, double fmax) {
+void InitializeUrysohnModel(UrysohnModel& u, int nFunctions, int nPoints, 
+	double xmin, double xmax, double fmin, double fmax, std::mt19937& rng) {
 	u.model.resize(nFunctions, std::vector<double>(nPoints));
 	u.xmin.resize(nFunctions);
 	u.xmax.resize(nFunctions);
@@ -21,7 +22,6 @@ void InitializeUrysohnModel(UrysohnModel& u, int nFunctions, int nPoints, double
 	u.offset.resize(nFunctions);
 	u.index.resize(nFunctions);
 
-	std::mt19937 rng(static_cast<unsigned>(std::time(nullptr)));
 	std::uniform_real_distribution<double> dist(fmin, fmax);
 	for (int i = 0; i < nFunctions; ++i) {
 		for (int j = 0; j < nPoints; ++j) {
