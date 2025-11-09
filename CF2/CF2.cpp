@@ -125,15 +125,17 @@ int main() {
 	double targetMax = *std::max_element(targets_training.begin(), targets_training.end());
 
 	// Instantiate models
+	std::random_device rd;
+	std::mt19937 rng(rd());
 	std::vector<std::unique_ptr<UrysohnModel>> uInnerModels;
 	for (int i = 0; i < nInner; ++i) {
 		auto model = std::make_unique<UrysohnModel>();
-		InitializeUrysohnModel(*model, nFeatures, 3, min, max, targetMin, targetMax);
+		InitializeUrysohnModel(*model, nFeatures, 3, min, max, targetMin, targetMax, rng);
 		uInnerModels.push_back(std::move(model));
 	}
 
 	auto uOuterModel = std::make_unique<UrysohnModel>();
-	InitializeUrysohnModel(*uOuterModel, nInner, 30, targetMin, targetMax, targetMin, targetMax);
+	InitializeUrysohnModel(*uOuterModel, nInner, 30, targetMin, targetMax, targetMin, targetMax, rng);
 
 	//training
 	for (int epoch = 0; epoch < 16; ++epoch) {
